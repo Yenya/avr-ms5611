@@ -42,7 +42,6 @@ int main(void) {
 	// enable IRQs
 	sei();
 
-	i2c_init();
 	// i2c_init(); not needed - called from ms5611_init()
 	ms5611_init();
 

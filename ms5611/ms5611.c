@@ -28,7 +28,7 @@
 
 // TODO: there can be two MS5611 sensors on the I2C bus, ids 0x76, 0x77.
 // Currently we support only one sensor for the sake of simplicity
-#define MS5611_ADDR	0x76	// can be 0x77 or 0x76
+#define MS5611_ADDR	0x76	// can be 0x77 or 0x76, 0x76 is CSB=VCC
 
 #define MS5611_I2CINIT		// comment out if called from somewhere else
 
@@ -68,15 +68,9 @@ void ms5611_reset()
 {
 	i2c_start_wait((MS5611_ADDR << 1) | I2C_WRITE);
 	i2c_write(MS5611_CMD_RESET);
-	_delay_us(MS5611_RESET_US);
-}
-
-static void ms5611_writemem(uint8_t reg, uint8_t value)
-{
-	i2c_start_wait((MS5611_ADDR << 1) | I2C_WRITE);
-	i2c_write(reg);
-	i2c_write(value);
 	i2c_stop();
+
+	_delay_us(MS5611_RESET_US);
 }
 
 static uint16_t ms5611_read_cal_reg(uint8_t reg)
@@ -155,6 +149,15 @@ static void ms5611_getcalibration(void)
 	ms5611_cal.tref  = ms5611_read_cal_reg(5);
 	ms5611_cal.tsens = ms5611_read_cal_reg(6);
 
+#ifdef DATASHEET_EXAMPLE
+	ms5611_cal.sens  = 40127;
+	ms5611_cal.off   = 36924;
+	ms5611_cal.tcs   = 23317;
+	ms5611_cal.tco   = 23282;
+	ms5611_cal.tref  = 33464;
+	ms5611_cal.tsens = 28312;
+#endif
+
 	MS5611_DEBUG("SENS ", (int32_t)ms5611_cal.sens);
 	MS5611_DEBUG("OFF  ", (int32_t)ms5611_cal.off);
 	MS5611_DEBUG("TCS  ", (int32_t)ms5611_cal.tcs);
@@ -185,18 +188,23 @@ void ms5611_measure(void)
 	temp_raw = ms5611_conv(MS5611_CMD_CONV_D2);
 	pres_raw = ms5611_conv(MS5611_CMD_CONV_D1);
 
+#ifdef DATASHEET_EXAMPLE
+	temp_raw = 8569150;
+	pres_raw = 9085466;
+#endif
+
 	MS5611_DEBUG("temp_raw", temp_raw);
 	MS5611_DEBUG("pres_raw", pres_raw);
 
 	dt = temp_raw - ((int32_t)ms5611_cal.tref << 8);
-	_ms5611_temp = 2000 + ((dt*(int32_t)ms5611_cal.tsens) >> 23);
+	_ms5611_temp = 2000 + ((dt*((int64_t)ms5611_cal.tsens)) >> 23);
 
 	MS5611_DEBUG("dt", dt);
 	MS5611_DEBUG("temp*100", _ms5611_temp);
 
 	off = ((int64_t)ms5611_cal.off << 16) + (((int64_t)dt*(int64_t)ms5611_cal.tco) >> 7);
 	sens = ((int64_t)ms5611_cal.sens << 15) + ((int64_t)ms5611_cal.tcs*dt >> 8);
-	_ms5611_pres = (((pres_raw*sens) >> 21) - off) >> 15;
+	_ms5611_pres = ((((uint64_t)pres_raw*sens) >> 21) - off) >> 15;
 	MS5611_DEBUG("pres*100", _ms5611_pres);
 }
 
